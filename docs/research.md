@@ -32,15 +32,15 @@ Unikernel是在云计算的背景下诞生的。
 
 也就是说，Unikernel是专用的，单地址空间的，使用库操作系统（libOS）构建的镜像。
 
-<img src="/Users/richard/Documents/GitHub/x-orz/docs/files/0-20200328202820804.png" alt="img" style="zoom:50%;" />       <img src="/Users/richard/Documents/GitHub/x-orz/docs/files/0-20200328202820867.png" alt="img" style="zoom:50%;" /> 
+<img src="files/0-20200328202820804.png" alt="img" style="zoom:50%;" />       <img src="files/0-20200328202820867.png" alt="img" style="zoom:50%;" /> 
 
 在传统模式中，OS会尽可能提供各式各样的底层服务，应用在运行时根据需要调用其中（相当小的）一部分。而Unikernel采取了另外一种思路，把传统模式中运行时做的事情放在编译时完成。通过特殊的编译工具，应用程序和它所依赖的库、驱动以及网络等功能与应用一起被打包在一个Unikernel镜像中，运行时共用一个连续地址空间。构建成的镜像可以直接在Hypervisor（如Xen）或裸金属（bare metal）上运行。当然，也有运行在Host OS上的libOS（进而构造出Unikernel），如Graphene和Drawbridge。
 
-![img](/Users/richard/Documents/GitHub/x-orz/docs/files/0-20200328202821060.png) 
+![img](files/0-20200328202821060.png) 
 
 Unikernel的典型结构如下图所示。通常，Unikernel还在libOS层下面添加一层平台适配层（Platform Adaption Layer），用以根据Unikernel所运行的不同平台（Hypervisor, Bare Metal）实现对应的ABI（Application Binary Interface，应用程序二进制接口），满足目标平台兼容性要求。
 
-![img](/Users/richard/Documents/GitHub/x-orz/docs/files/0-20200328202820890.png) 
+![img](files/0-20200328202820890.png) 
 
 #### 解决的问题
 
@@ -70,7 +70,7 @@ Unikernel试图抹去现代操作系统带来的一些复杂性。因为“通�
 
 与Unikernel不同的是，容器运行在宿主系统上，多个容器共享内核的资源。而Unikernel由于直接运行在Hypervisor上，具有更好的隔离性和安全性。（如前所述，Unikernel也可以直接运行在 bare metal 或 Host OS，只是不同的实现支持的平台不同，但多数选择Hypervisor）
 
-![img](/Users/richard/Documents/GitHub/x-orz/docs/files/0-20200328202820940.jpeg)
+![img](files/0-20200328202820940.jpeg)
 
 #### 应用场景
 
@@ -191,7 +191,7 @@ int main(){
 
 运行效果：
 
-![img](/Users/richard/Documents/GitHub/x-orz/docs/files/0-20200328202821061.jpeg)            
+![img](files/0-20200328202821061.jpeg)            
 
 #### 局限性
 
@@ -317,13 +317,13 @@ I/O优化例子：Hyper-V采用基于VMbus的高速内存总线架构，来自�
 
   e.g. 面向企业级应用的VMware vSphere
 
-  ![img](/Users/richard/Documents/GitHub/x-orz/docs/files/0.jpeg) 
+  ![img](files/0.jpeg) 
 
 - Host模型：VMM运行于一操作系统之上，可以充分利用现有操作系统的功能，如驱动程序。但由于物理资源由宿主机操作系统控制，VMM得要调用宿主机操作系统的服务来获取资源进行虚拟化，而那些系统服务在设计开发之初并没有考虑虚拟化的支持，因此，VMM虚拟化的效率和功能会受到一定影响。此外，在安全方面，虚拟机的安全不仅依赖于VMM的安全，也依赖于宿主机操作系统的安全。
 
   e.g. KVM、VirtualBox和VMware Workstation
 
-  ![img](/Users/richard/Documents/GitHub/x-orz/docs/files/0-20200328202820873.jpeg) 
+  ![img](files/0-20200328202820873.jpeg) 
 
 - 混合模型：VMM依然位于最低层，拥有所有的物理资源。与Hypervisor模式不同的是，VMM 会主动让出大部分I/O设备的控制权，将它们交由一个运行在特权虚拟机中的特权操作系统控制。I/O设备虚拟化由VMM和特权操作系统共同完成，因此，设备模型模块位于特权操作系统中，并且通过相应的通信机制与VMM合作。在安全方面，如果对特权操作系统的权限控制得当，虚拟机的安全性只依赖于VMM。但切换特权操作系统需要开销。
 
@@ -345,7 +345,7 @@ Docker 开始阶段使用的也是 LXC，以cgroup和namespace进行隔离，其
 
 ### 操作系统结构发展历程
 
-![img](/Users/richard/Documents/GitHub/x-orz/docs/files/0-20200328202821125.png) 
+![img](files/0-20200328202821125.png) 
 
 #### 宏内核（Monolithic Kernel）
 
@@ -381,7 +381,7 @@ Docker 开始阶段使用的也是 LXC，以cgroup和namespace进行隔离，其
 
 #### ExoKernel
 
-![img](/Users/richard/Documents/GitHub/x-orz/docs/files/0-20200328202820947.png) 
+![img](files/0-20200328202820947.png) 
 
 一般的OS是对硬件做抽象，向上不直接暴露硬件，而是暴露硬件的抽象。但是存在一些场景，应用更希望直接跟硬件打交道（如：数据库直接与磁盘交互，这样可以精确地确定它的索引等文件的存储位置，来针对硬件来做优化），这催生出了ExoKernel。它的设计思路是尽可能减少抽象层次，允许应用程序直接访问硬件，而ExoKernel只负责保护和分配系统资源。
 
