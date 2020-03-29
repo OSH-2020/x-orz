@@ -358,11 +358,11 @@ qemu-system-aarch64 -cpu cortex-a57 -smp 4 -m 2048M -M virt -nographic -kernel b
 
    ```
    CONFIG_NET_9P=y
-CONFIG_9P_FS=y
-CONFIG_VIRTIO_PCI=y
-CONFIG_NET_9P_VIRTIO=y
-CONFIG_9P_FS_POSIX_ACL=y
-CONFIG_NET_9P_DEBUG=y (Optional可选)
+   CONFIG_9P_FS=y
+   CONFIG_VIRTIO_PCI=y
+   CONFIG_NET_9P_VIRTIO=y
+   CONFIG_9P_FS_POSIX_ACL=y
+   CONFIG_NET_9P_DEBUG=y (Optional可选)
    ```
    
    然后就可以共享文件。
