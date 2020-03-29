@@ -1,7 +1,3 @@
----
-typora-copy-images-to: ./files
----
-
 # 可行性报告
 
 [TOC]
@@ -221,11 +217,11 @@ UniK支持的平台：
    编辑 `$HOME/.unik/daemon-config.yaml` 文件：
 
    ```
-providers:
-    virtualbox:
-    - name: my-vbox
-    adapter_type: host_only
-    adapter_name: 配置的网络适配器
+   providers:
+     virtualbox:
+      - name: my-vbox
+      adapter_type: host_only
+      adapter_name: 配置的网络适配器
    ```
 
 1. 启动UniK，自动部署Virtualbox Instance Listener
