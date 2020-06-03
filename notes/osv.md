@@ -38,3 +38,25 @@ export MAKEFLAGS=-j$(nproc)
 #另外我也还没搞清楚firecracker怎么退出，所以现在只能用kill
 ```
 
+
+
+和其它Unikernel一样，OSv也不支持多进程，但支持多线程
+
+https://github.com/cloudius-systems/osv/wiki/OSv-Linux-ABI-Compatibility
+
+比如说，可以直接把lab3-1中的双人聊天室程序打包成镜像：
+
+```shell
+#先把tests/test-thread文件夹放到osv/apps中
+#当前目录为osv仓库
+./scripts/build image=test-thread
+./scripts/firecracker.py -n
+#输出里会有ip地址，然后可以像lab3时通过“nc <ip地址> 6666”来测试
+#不同的是，这次相当于和一台VM通信
+```
+
+通过这种方式创建OSv通常需要准备几个文件（参见test-thread中的内容）
+
+- 源码和Makefile：不言自明
+- usr.manifest：指示如何部署所需文件到OSv镜像中，格式为<镜像中位置>: <主机中位置>
+- module.py：主要是声明与其它模块之间的依赖关系、运行时的配置
