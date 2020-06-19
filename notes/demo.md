@@ -81,6 +81,36 @@ Key-value store is not available
 
 的输出产生（但此处我并没有将db.js按上述方法打包，可以从文件路径上看到区别）
 
+6.19更新
+
+按照firecracker提供的地址访问是可以访问到的，至此完成打包，关于命令行参数只需改动项目目录（即osv/apps/xxx/）下module.py中的对应行即可。
+
+```shell
+wangyuanlong@ubuntu:~/osv$ ./scripts/firecracker.py -n
+The tap interface fc_tap0 not found -> needs to set it up!
+Setting up TAP device in natted mode!
+[sudo] password for wangyuanlong: 
+To make outgoing traffic work pass physical NIC name
+OSv v0.55.0-13-gcf78fa9e
+eth0: 172.16.0.2
+Booted up in 231.57 ms
+Cmdline: /libnode.so ./examples/hello-world  
+Running keyvaluestore on port:  9000
+server is listening on 9000
+
+#在另一个终端中
+wangyuanlong@ubuntu:~/osv-microservice-demo$ node db.js 172.16.0.2:9000
+Running db on port:  9001
+Using keyvaluestore endpoint:  http://172.16.0.2:9000
+Database endpoint registered
+Database is listening on 9001
+#回到原来终端，产生输出
+
+dbendpoint=172.16.0.1:9001
+```
+
+
+
 ## PS
 
 express是一个实用的nodejs网络框架
