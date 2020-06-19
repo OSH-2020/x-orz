@@ -32,10 +32,11 @@ export MAKEFLAGS=-j$(nproc)
 
 #编译一个nginx试试
 ./scripts/build image=nginx
-#运行（我暂时还没调试清楚qemu的网络配置，这里就只用firecracker了）
+#运行
+./scripts/run -nv
 ./scripts/firecracker.py -n
 #之后的输出里面会有ip地址，打开浏览器访问应该就能看到nginx的欢迎界面了
-#另外我也还没搞清楚firecracker怎么退出，所以现在只能用kill
+#qemu退出方法：Ctrl A，然后按 X
 ```
 
 
