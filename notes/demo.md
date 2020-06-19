@@ -38,7 +38,48 @@ Error: Cannot find module 'express'
 
 将keyvaluestore改名为index.js放到`/apps/node-express-example/ROOTFS/express/examples/hello_world`下，打包运行，仍然报错。
 
-可能需要进一步学习express用法，https://github.com/expressjs/express
+~~可能需要进一步学习express用法，https://github.com/expressjs/express~~
+
+6.19进展：发现在上述操作之后把keyvaluestore.js(已更名为index.js)中
+
+```javascript
+var express = require('express')
+```
+改为
+
+```javascript
+var express = require('../../')
+```
+
+即可打包并正常运行，但是不知什么原因网络仍然是不可用的，就是说即使有下列输出：
+
+```shell
+wangyuanlong@ubuntu:~/osv$ ./scripts/run.py
+OSv v0.55.0-13-gcf78fa9e
+eth0: 192.168.122.15
+Booted up in 593.49 ms
+Cmdline: /libnode.so ./examples/hello-world
+Running keyvaluestore on port:  9000
+server is listening on 9000
+```
+
+但另起终端运行db.js，仍然会有类似：
+
+```shell
+wangyuanlong@ubuntu:~/osv-microservice-demo$ node db.js localhost:9000
+Running db on port:  9001
+Using keyvaluestore endpoint:  http://localhost:9000
+Key-value store is not available
+Key-value store is not available
+Key-value store is not available
+Key-value store is not available
+Key-value store is not available
+Key-value store is not available
+Key-value store is not available
+^C
+```
+
+的输出产生（但此处我并没有将db.js按上述方法打包，可以从文件路径上看到区别）
 
 ## PS
 
