@@ -1,0 +1,46 @@
+{
+   "machine-config": {
+      "vcpu_count": 1,
+      "mem_size_mib": 128,
+      "ht_enabled": false
+   },
+   "drives": [
+      {
+         "drive_id": "rootfs",
+         "path_on_host": "curl.raw",
+         "is_root_device": false,
+         "is_read_only": false
+      }
+   ],
+   "network-interfaces": [
+      {
+         "iface_id": "eth0",
+         "host_dev_name": "fc_tap1",
+         "guest_mac": "52:54:00:12:34:57",
+         "rx_rate_limiter": {
+            "bandwidth": {
+               "size": 0,
+               "refill_time": 0
+            },
+            "ops": {
+               "size": 0,
+               "refill_time": 0
+            }
+         },
+         "tx_rate_limiter": {
+            "bandwidth": {
+               "size": 0,
+               "refill_time": 0
+            },
+            "ops": {
+               "size": 0,
+               "refill_time": 0
+            }
+         }
+      }
+   ],
+   "boot-source": {
+      "kernel_image_path": "kernel.elf",
+      "boot_args": "--ip=eth0,172.16.0.3,255.255.255.0 --defaultgw=172.16.0.1 --nameserver=172.16.0.1 --verbose --nopci /curl 172.16.0.2"
+   }
+}
