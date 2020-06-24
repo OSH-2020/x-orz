@@ -29,17 +29,17 @@ class Tap:
         bridges = subprocess.check_output(['brctl', 'show']).decode('utf-8')
         if bridges.find(bridge_name) < 0:
             print("The bridge %s does not exist per brctl -> need to create one!" % bridge_name)
-            setup_bridge(bridge_name)
+            setup_bridge(bridge_name, '172.16.0.1/24')
 
-        subprocess.run(['sudo','ip', 'tuntap', 'add', 'dev', tap_name, 'mode', 'tap'])
-        subprocess.run(['ip', 'link', 'set', 'dev', tap_name, 'up'])
-        subprocess.run(['brctl', 'addif', bridge_name, tap_name])
+        subprocess.run(['sudo', 'ip', 'tuntap', 'add', 'dev', tap_name, 'mode', 'tap'])
+        subprocess.run(['sudo', 'ip', 'link', 'set', 'dev', tap_name, 'up'])
+        subprocess.run(['sudo', 'brctl', 'addif', bridge_name, tap_name])
 
         self.name = tap_name
 
     def __del__(self):
         """Destructor doing tap interface clean up."""
-        subprocess.run(['ip', 'tuntap', 'del', 'dev', self.name, 'mode', 'tap'])
+        subprocess.run(['sudo', 'ip', 'tuntap', 'del', 'dev', self.name, 'mode', 'tap'])
 
 
 class ApiException(Exception):
@@ -53,8 +53,8 @@ class ApiClient(object):
         else:
             self.name = uuid.uuid4().hex[:8]
 
-        self.mac = ":".join(["%02x" % x for x in map(lambda x: randint(0, 255), range(6))])
         self.ip = "172.16.0." + str(id)
+        self.mac = mac_from_ip(self.ip)
 
         self.socket_less = socket_less
         if socket_less:
@@ -170,10 +170,10 @@ def print_time(msg):
         now = datetime.now()
         print("%s: %s" % (now.isoformat(), msg))
 
-def setup_bridge(bridge_name):
-    subprocess.run(['brctl', 'addbr', bridge_name])
-    subprocess.run(['ip', 'link', 'set', 'dev', bridge_name, 'up'])
-    subprocess.run(['ip', 'addr', 'add', '172.16.0.1/24', 'dev', bridge_name])
+def setup_bridge(bridge_name, ip_and_mask):
+    subprocess.run(['sudo', 'brctl', 'addbr', bridge_name])
+    subprocess.run(['sudo', 'ip', 'link', 'set', 'dev', bridge_name, 'up'])
+    subprocess.run(['sudo', 'ip', 'addr', 'add', ip_and_mask, 'dev', bridge_name])
 
 def disk_path(qcow_disk_path):
     dot_pos = qcow_disk_path.rfind('.')
@@ -189,6 +189,27 @@ def disk_path(qcow_disk_path):
             exit(-1)
     return raw_disk_path
 
+def mac_from_ip(ip_address):
+    """Create a MAC address based on the provided IP.
+    Algorithm:
+    - the first 2 bytes are fixed to 06:00
+    - the next 4 bytes are the IP address
+    Example of function call:
+    mac_from_ip("192.168.241.2") -> 06:00:C0:A8:F1:02
+    C0 = 192, A8 = 168, F1 = 241 and  02 = 2
+    :param ip_address: IP address as string
+    :return: MAC address from IP
+    """
+    mac_as_list = ['06', '00']
+    mac_as_list.extend(
+        list(
+            map(
+                lambda val: '{0:02x}'.format(int(val)),
+                ip_address.split('.')
+            )
+        )
+    )
+    return "{}:{}:{}:{}:{}:{}".format(*mac_as_list)
 
 def start_firecracker(firecracker_path, socket_path):
     # Start firecracker process to communicate over specified UNIX socket file
@@ -197,7 +218,7 @@ def start_firecracker(firecracker_path, socket_path):
 
 def start_firecracker_with_no_api(firecracker_path, firecracker_config_json):
     #  Start firecracker process and pass configuration JSON as a file
-    api_file = tempfile.NamedTemporaryFile(delete=False)
+    api_file = tempfile.NamedTemporaryFile(delete=False, prefix='fc', suffix='.conf')
     api_file.write(bytes(firecracker_config_json, 'utf-8'))
     api_file.flush()
     return subprocess.Popen([firecracker_path, "--no-api", "--config-file", api_file.name],
@@ -286,8 +307,6 @@ if __name__ == "__main__":
                         help="path to disk image file.")
     parser.add_argument("-k", "--kernel", action="store", default="kernel.elf",
                         help="path to kernel loader file. defaults to kernel.elf")
-    # parser.add_argument("-n", "--networking", action="store_true",
-    #                     help="needs root to setup tap networking first time")
     parser.add_argument("id", action="store", type=int,
                         help="unique id to set the vm's ip statically. range: [2:254]")
     parser.add_argument("-b", "--bridge", action="store", default="fc_br0",
@@ -296,8 +315,6 @@ if __name__ == "__main__":
                         help="pass --verbose to OSv, to display more debugging information on the console")
     parser.add_argument("-a", "--api", action="store_true",
                         help="use socket-based API to configure and start OSv on firecracker")
-    parser.add_argument("-p", "--physical_nic", action="store", default=None,
-                        help="name of the physical NIC (wired or wireless) to forward to if in natted mode")
 
     cmd_args = parser.parse_args()
     if cmd_args.verbose:
