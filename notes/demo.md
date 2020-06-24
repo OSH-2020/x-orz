@@ -109,7 +109,20 @@ Database is listening on 9001
 dbendpoint=172.16.0.1:9001
 ```
 
+6.24更新
 
+其它项目文件中有诸如`ip`，`os`等等依赖项，同时也用到了同目录下的common.js文件，具体的处理方式是：将common.js放在上述hello-world目录下，将需要打包运行的文件改名为index.js放在hello-world下，然后将需要的外部依赖放在`/apps/node-express-example/ROOTFS/express/node_modules`目录下（我的操作是直接把osv-microservice-demo项目目录下的`node_modules`目录全都复制到前面的目录下，重复部分跳过），记得index.js里的
+
+```javascript
+var express = require('express')
+```
+改为
+
+```javascript
+var express = require('../../')
+```
+
+（有可能不改也行，因为依赖项已经复制过来了，不过我没有尝试）
 
 ## PS
 
