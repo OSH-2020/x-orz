@@ -66,8 +66,10 @@ class ApiClient(object):
         
         print_time("API socket-less: %s" % self.socket_less)
 
+    # def __del__(self):
+
     def api_socket_url(self, path):
-        return "http+unix://%s%s" % (self.socket_path, path)
+        return "http+unix://%s%s" % (self.socket_path.replace("/", "%2F"), path)
 
     def make_put_call(self, path, request_body):
         url = self.api_socket_url(path)
@@ -275,6 +277,11 @@ def main(options):
         else:
             client.start_instance()
             print_time("Booted OSv VM")
+
+    except ApiException as e:
+        print("Failed to make firecracker API call: %s." % e)
+        firecracker.kill()
+        exit(-1)
 
     except Exception as e:
         print("Failed to run OSv on firecracker due to: %s" % e)
