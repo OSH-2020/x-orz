@@ -11,13 +11,14 @@ import argparse
 import json
 import tempfile
 import uuid
-from random import randint
 from datetime import datetime
 
 
 verbose = False
 
 devnull = open('/dev/null', 'w')
+
+firecracker_path = "firecracker"
 
 
 class Tap:
@@ -42,12 +43,8 @@ class Tap:
         subprocess.run(['sudo', 'ip', 'tuntap', 'del', 'dev', self.name, 'mode', 'tap'])
 
 
-class ApiException(Exception):
-    pass
-
-
-class ApiClient(object):
-    def __init__(self, id, name=None, socket_less=True):
+class FCInstance(object):
+    def __init__(self, id, name=None):
         if name:
             self.name = name
         else:
@@ -56,39 +53,33 @@ class ApiClient(object):
         self.ip = "172.16.0." + str(id)
         self.mac = mac_from_ip(self.ip)
 
-        self.socket_less = socket_less
-        if socket_less:
-            self.firecracker_config = {}
-        else:
-           import requests_unixsocket
-           self.socket_path = "/tmp/fc" + self.name + ".socket"
-           self.session = requests_unixsocket.Session()
-        
-        print_time("API socket-less: %s" % self.socket_less)
+        self.firecracker_config = {}     
 
-    # def __del__(self):
+    def __del__(self):
+        os.remove(self.conf_file.name)
 
-    def api_socket_url(self, path):
-        return "http+unix://%s%s" % (self.socket_path.replace("/", "%2F"), path)
+    # def configure(self, vcpu_count, mem_size_in_mb, kernel_path, cmdline, image_path, interface_name, bridge_name):
+    #     self.add_machine_config(vcpu_count, mem_size_in_mb)
+    #     self.add_boot_source(kernel_path, cmdline)
+    #     self.add_disk(image_path)
+    #     self.add_network_interface(interface_name, bridge_name)
 
-    def make_put_call(self, path, request_body):
-        url = self.api_socket_url(path)
-        res = self.session.put(url, data=json.dumps(request_body))
-        if res.status_code != 204:
-            raise ApiException(res.text)
-        return res.status_code
+    def add_machine_config(self, vcpu_count, mem_size_in_mb):
+        machine_config = {
+            'vcpu_count': vcpu_count,
+            'mem_size_mib': mem_size_in_mb,
+            'ht_enabled' : False
+        }
+        self.firecracker_config['machine-config'] = machine_config
 
-    def create_instance(self, kernel_path, cmdline):
+    def add_boot_source(self, kernel_path, cmdline):
         cmdline = "--nopci %s" % cmdline
         cmdline = '--ip=eth0,%s,255.255.255.0 --defaultgw=172.16.0.1 --nameserver=172.16.0.1 %s' % (self.ip, cmdline)
         boot_source = {
             'kernel_image_path': kernel_path,
             'boot_args': cmdline
         }
-        if self.socket_less:
-            self.firecracker_config['boot-source'] = boot_source
-        else:
-            self.make_put_call('/boot-source', boot_source)
+        self.firecracker_config['boot-source'] = boot_source
 
     def add_disk(self, image_path):
         drive = {
@@ -97,10 +88,7 @@ class ApiClient(object):
             'is_root_device': False,
             'is_read_only': False
         }
-        if self.socket_less:
-            self.firecracker_config['drives'] = [drive]
-        else:
-            self.make_put_call('/drives/rootfs', drive)
+        self.firecracker_config['drives'] = [drive]
 
     def add_network_interface(self, interface_name, bridge_name):
         self.tap = Tap('fc_tap' + self.name, bridge_name)
@@ -129,18 +117,9 @@ class ApiClient(object):
                }
             }
         }
-        if self.socket_less:
-            self.firecracker_config['network-interfaces'] = [interface]
-        else:
-            self.make_put_call('/network-interfaces/%s' % interface_name, interface)
+        self.firecracker_config['network-interfaces'] = [interface]
 
-    def start_instance(self):
-        if self.socket_less == False:
-            self.make_put_call('/actions', {
-                'action_type': 'InstanceStart'
-            })
-
-    def configure_logging(self):
+    def add_logger(self):
         log_config = {
             "log_fifo": "log.fifo",
             "metrics_fifo": "metrics.fifo",
@@ -148,24 +127,28 @@ class ApiClient(object):
             "show_level": True,
             "show_log_origin": True
         }
-        if self.socket_less:
-            self.firecracker_config['logger'] = log_config
-        else:
-            self.make_put_call('/logger', log_config)
-
-    def configure_machine(self, vcpu_count, mem_size_in_mb):
-        machine_config = {
-            'vcpu_count': vcpu_count,
-            'mem_size_mib': mem_size_in_mb,
-            'ht_enabled' : False
-        }
-        if self.socket_less:
-            self.firecracker_config['machine-config'] = machine_config
-        else:
-            self.make_put_call('/machine-config', machine_config)
+        self.firecracker_config['logger'] = log_config
 
     def firecracker_config_json(self):
         return json.dumps(self.firecracker_config, indent=3)
+
+    def start(self):
+        #  Start firecracker process and pass configuration JSON as a file
+        self.conf_file = tempfile.NamedTemporaryFile(delete=False, prefix='fc', suffix='.conf')
+        self.conf_file.write(bytes(self.firecracker_config_json(), 'utf-8'))
+        self.conf_file.flush()
+        self.firecracker = subprocess.Popen([firecracker_path, "--no-api", "--config-file", self.conf_file.name],
+                            stdout=sys.stdout, stderr=subprocess.STDOUT)
+
+    def wait(self):
+        try:
+            self.firecracker.wait()
+        except KeyboardInterrupt:
+            os.kill(self.firecracker.pid, signal.SIGINT)
+
+    def stop(self):
+        self.firecracker.kill()
+
 
 def print_time(msg):
     if verbose:
@@ -213,19 +196,6 @@ def mac_from_ip(ip_address):
     )
     return "{}:{}:{}:{}:{}:{}".format(*mac_as_list)
 
-def start_firecracker(firecracker_path, socket_path):
-    # Start firecracker process to communicate over specified UNIX socket file
-    return subprocess.Popen([firecracker_path, '--api-sock', socket_path],
-                           stdout=sys.stdout, stderr=subprocess.STDOUT)
-
-def start_firecracker_with_no_api(firecracker_path, firecracker_config_json):
-    #  Start firecracker process and pass configuration JSON as a file
-    api_file = tempfile.NamedTemporaryFile(delete=False, prefix='fc', suffix='.conf')
-    api_file.write(bytes(firecracker_config_json, 'utf-8'))
-    api_file.flush()
-    return subprocess.Popen([firecracker_path, "--no-api", "--config-file", api_file.name],
-                           stdout=sys.stdout, stderr=subprocess.STDOUT), api_file.name
-
 
 def main(options):
     # Check if firecracker is installed
@@ -235,10 +205,7 @@ def main(options):
     print_time("Start")
 
     # Create API client and make API calls
-    client = ApiClient(options.id, socket_less = not options.api)
-
-    if options.api:
-        firecracker = start_firecracker('firecracker', client.socket_path)
+    instance = FCInstance(options.id)
 
     # Prepare arguments we are going to pass when creating VM instance
     kernel_path = os.path.join(cwd, options.kernel)
@@ -252,52 +219,31 @@ def main(options):
         cmdline = '--verbose ' + cmdline
 
     try:
-        # Very often on the very first run firecracker process
-        # is not ready yet to accept calls over socket file
-        # so we poll existence of this file as a good
-        # enough indicator if firecracker is ready
-        if options.api:
-            while not os.path.exists(client.socket_path):
-                time.sleep(0.01)
         print_time("Firecracker ready")
 
-        client.configure_machine(options.vcpus, options.memsize)
+        instance.add_machine_config(options.vcpus, options.memsize)
         print_time("Configured VM")
 
-        client.add_disk(raw_disk_path)
+        instance.add_disk(raw_disk_path)
         print_time("Added disk")
 
-        client.add_network_interface('eth0', 'fc_br0')
+        instance.add_network_interface('eth0', 'fc_br0')
+        print_time("Added network interface")
 
-        client.create_instance(kernel_path, cmdline)
+        instance.add_boot_source(kernel_path, cmdline)
         print_time("Created OSv VM with cmdline: %s" % cmdline)
 
-        if not options.api:
-            firecracker, config_file_path = start_firecracker_with_no_api("firecracker", client.firecracker_config_json())
-        else:
-            client.start_instance()
-            print_time("Booted OSv VM")
-
-    except ApiException as e:
-        print("Failed to make firecracker API call: %s." % e)
-        firecracker.kill()
-        exit(-1)
+        instance.start()
 
     except Exception as e:
         print("Failed to run OSv on firecracker due to: %s" % e)
-        firecracker.kill()
+        instance.stop()
         exit(-1)
 
     print_time("Waiting for firecracker process to terminate")
-    try:
-        firecracker.wait()
-    except KeyboardInterrupt:
-        os.kill(firecracker.pid, signal.SIGINT)
 
-    if options.api:
-        os.remove(client.socket_path)
-    else:
-        os.remove(config_file_path)
+    instance.wait()
+
     print_time("End")
 
 
@@ -320,8 +266,6 @@ if __name__ == "__main__":
                         help="bridge name for tap networking. defaults to fc_br0")
     parser.add_argument("-V", "--verbose", action="store_true",
                         help="pass --verbose to OSv, to display more debugging information on the console")
-    parser.add_argument("-a", "--api", action="store_true",
-                        help="use socket-based API to configure and start OSv on firecracker")
 
     cmd_args = parser.parse_args()
     if cmd_args.verbose:
