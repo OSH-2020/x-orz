@@ -8,7 +8,7 @@
 
 
 
-## 立项依据
+## 立项依据（回顾）
 
 ### 重要性与前瞻性
 
@@ -39,8 +39,9 @@ DEMO整体由以下几个部分组成：
 - 任务调度器(db)，主要作用是维护了一个任务队列，每一个任务对象包含的信息有：全局唯一的任务ID，任务的类型，任务的状态。
 - storage，存储模块，用来存储待处理的数据(raw data)。例如，如果是一个图片处理任务，那么其中存储的就是待处理的图片。
 - worker，真正直接执行具体任务的模块。有了如前所述的架构支撑，这个部分可以根据实际应用场景的需求来填充worker部件。这个部分也是全局运算资源需求最大的部分。
+- API Gateway [未实现]，提供统一的微服务调用接口，从而减少模块间的耦合度
 
-[这里放个图] //有要补充的模块请联系我或自行补充
+![image-20200722205853065](files/image-20200722205853065.png)
 
 ### Uigniter 
 
@@ -91,59 +92,6 @@ DEMO整体由以下几个部分组成：
 
 由于OSv移植方便，且支持多种编程语言，我们觉得它更可能促进Web应用部署由Container转向Unikernel（而不是IncludeOS、mirageOS这类移植很不方便的工具），毕竟计算机历史上很多变革靠的都不是表现“最优”的新技术，而是那些与旧技术兼容性更好、迁移更容易而表现不差的新技术。
 
-#### OSv镜像的打包
-
-我们使用官方提供的`./scripts/build`脚本来打包镜像，使用`image=<app_name>`参数来指定要打包的应用项目，这一脚本将会从`./apps/<app_name>`的目录寻找打包镜像所需要的文件，以上面的 native-example 为例，这一目录下有以下文件：
-
-- hello.c ：源程序代码
-
-- Makefile ：打包时会进行 make ，可以把依赖项获取，源代码编译等等内容全都写在里面
-
-- module.py ：打包时指定镜像中运行的命令行等等，格式为：
-
-  ```python
-  from osv.modules import api
-  
-  default = api.run("/hello")	#具体使用时可以根据需要修改命令行，但是命令行也可以在运行时由参数指定，故这个地方不是必要的
-  ```
-
-- usr.manifest ：描述需要放到镜像内的文件在镜像中的位置，其中条目的格式为<镜像中位置>: <主机中位置>  这一文件通常也可以用 Makefile 来生成
-
-- README.md ：不言自明，是简单的项目描述
-
-#### 打包我们的模块
-
-OSv的优点之一就是提供了很高的兼容性支持，如C，C++，node.js，java，lua，python 等等语言全部都提供运行时支持（实际上是支持 Linux API）。并且在`osv/apps/`目录下有大量的实例应用以及运行时的打包模板（即之前叙述的打包所需的一些文件，除了应用源代码）等等
-
-我们的模块使用 JavaScript 编写，OSv 提供的打包既可以通过打包时自动下载 node ，也可以选择从主机复制node 相关文件，我们选择了自动下载，自动下载是在`./apps/node/Makefile`文件中进行设定配置以及版本选择的，首先可以使用（当前目录为OSv项目目录）
-
-```shell
-./scripts/build image=node
-```
-
-来下载，编译 node 以及生成 usr.manifest 等等，但是由于官方提供的文件似乎有些问题，直接使用脚本打包会报错，于是我们手动在自动下载的node目录中运行`make`，完成后将`./apps/node/node-8.11.2/out/Release/lib.target/libnode.so`复制到`./apps/node`目录下并改名为 `libnode-8.11.2.so`
-
-然后再按上述方法打包即可
-
-由于我们的模块使用了 express 框架，而 OSv 恰巧提供了`node-express-example`示例应用，所以我们将之稍加改动，用以打包我们的应用，通过之前的介绍，只需要将该示例中打包进镜像的 js 源代码改动一下，并且将我们的模块中`require`调用的路径参数修改一下即可。
-
-按照之前的描述，将 Firecracker 启动镜像所需的文件准备好，然后运行镜像如下（以keyvaluestore服务为例）：
-
-```shell
-#下面是启动实例
-$ ./firecracker.py microservice.raw 2 -e "/libnode.so keyvaluestore.js"
-The bridge fc_br0 does not exist per brctl -> need to create one!
-[sudo] password for wangyuanlong: 
-OSv v0.55.0-13-gcf78fa9e
-eth0: 172.16.0.2
-Booted up in 907.72 ms
-Cmdline: /libnode.so keyvaluestore.js  
-Running keyvaluestore on port:  9000
-server is listening on 9000
-```
-
-这里的 firecracker.py 文件为根据我们需要修改的启动脚本，可以支持多个 unikernel 使用网络通信，其 ip 地址通过命令中的参数进行配置
-
 ### OSv的修改 
 
 我们发现，当OSv中的应用空闲/阻塞时（比如Nginx等待请求），整个OSv实例仍会占用宿主机超过10%的CPU资源，这是不合理的。而且考虑到这意味这我们的测试机只能同时运行不到100个Unikernel，这是完全无法接受的。
@@ -173,7 +121,9 @@ server is listening on 9000
 
 理想情况下，我们希望有类似Kubernetes这样的工具来编排OSv实例。现有条件下,我们可以使用K8s+Virtlet插件或者OpenStack，通过移植Firecracker替代原本的Libvirt/QEMU后端，达到运行OSv的目的；又或者通过专为Firecracker开发的管理工具[Weave Ignite](https://github.com/weaveworks/ignite/)（类似容器中的Docker，运行OCI标准的镜像），修改使其兼容OSv镜像。不过，上述工具都是原本为虚拟机/容器开发的，不容易保留原本OSv+Firecracker方案的优势（如冷启动时间），对原本就比较复杂的项目加以修改对我们也是个挑战。考虑到我们的功能需求比较简单（创建、启动、停止OSv实例），我们决定使用Go语言自己实现一个轻量的OSv管理工具，这就是Uigniter。
 
-### 将 keyvaluestore.js 替换为 memcached
+### 模块替换
+
+以 “将 keyvaluestore.js 替换为 memcached” 为例
 
 由于我们的项目采用模块化的设计，所以某一模块对于其它模块而言近乎黑箱，可以方便的粘合不同的功能实现以及不同语言实现。为了展示这一特点，同时也作为提高访问性能的尝试，我们将 keyvaluestore.js 替换为 memcached 应用。
 
@@ -229,13 +179,7 @@ END				#信息结束
 
 ### 运行结果
 
-#### 直接在 node 中运行
-
-环境：
-
-- Ubuntu 20.04 (有虚拟化支持，具备 /dev/kvm 设备)
-- node v10.19.0
-- 个人PC
+#### 直接在Host机器运行
 
 如果让所有模块全部在主机中运行，则它们之间的通信可以通过 localhost 进行：
 
@@ -243,11 +187,15 @@ END				#信息结束
 
 ![img](files/QQ2020072101.png)
 
+#### 使用Unikernel运行
 
+也就是Uigniter+Firecracker+OSv的方式
 
-#### 使用unikernel运行
+视频链接：https://rec.ustc.edu.cn/share/94693a20-cc17-11ea-a95e-cf8b29b975c1
 
+### 性能测试
 
+在实际使用中，用户感知到的（冷启动）响应时间，应该是自用户请求微服务，至得到微服务的响应的这段时间，中间经历了创建OSv实例、启动OSv、加载应用等阶段。我们在测试机上启动了100个OSv实例，应用为cURL，测得平均相应时间为163ms。如果将Uigniter的API调用途径由localhost改为Unix domain socket，应该可以进一步提升性能。
 
 
 
@@ -255,20 +203,9 @@ END				#信息结束
 
 我们项目理想的架构（可以把微服务的标准模型搬过来？）
 
-### 与IoT领域应用相结合
+项目的愿景（未来还可以做的）
 
-IoT强调万物互联，在一个物联网应用场景诸如智能家居，智能城市，工业4.0之中，具有着大量终端设备，比如传感器，机器人，数控设备等等，它们会实时产生大量的原始数据（raw data），需要经过一定的处理以及数据挖掘的过程以参与对于真实物理世界的数字化建模，从而使计算机可以参与控制。
 
-以一个工业控制系统为例，在一个智能工厂当中，控制系统需要传感器，摄像头，机床，等等物理设备传回大量数据来了解物理世界，这些原始的数据需要经过一定的处理，提取出其中相对更有用的部分，来建立一个工厂的数字化模型，同时也能向人绘制一幅可视化的实时的工厂状态图。而智能决策系统通过这个模型的参数进行决策，快速对工厂里发生的事件做出反应。这样的过程对于控制系统有一定的要求，包括：
-
-- 实时性：系统要能迅速发现紧急事态，并且快速做出反应，如核反应堆温度过高等等
-- 高并发性：由于终端设备的数量相当庞大，每一时刻都会有大量的原始数据产生，需要系统具有处理海量连接以及计算大量连接传回数据的能力
-- 容错性：系统中某一功能的暂时失效能够快速被修复，并且不会严重影响到其它功能模块。
-- 安全性：要能比较好地防止外部入侵，对于已经发生的入侵能快速进行隔离，防止产生严重后果。
-
-在这样一个系统中，尤其是数据处理这一层上，Unikernel的轻量特点可以带来较低的启动速度，较少的资源占用，从而使极高的并发性成为可能；而其高度封装的特性可以使得模块之间更加容易解耦，尤其是有状态服务与无状态服务之间的解耦，对于原始数据的处理大部分是无状态的计算任务，使用Unikernel方案可以根据需要快速地启动关闭无状态的Unikernel，而不用担心数据的丢失。在某个无状态Unikernel出错的时候，可以直接将其关闭，然后启动新的Unikernel代替之，而不会对其他功能模块产生较大的影响。
-
-综合来说，Unikernel的解决方案具有容器方案所没有的隔离性与安全性，多进程/线程方案所没有的低延迟，轻量，高容错率与模块解耦的特性（注意到线程的出错是有可能导致整个进程的崩溃的）。另外相比公共云服务又有着相当的安全性，所以Unikernel在IoT领域有着相当不错的前景。
 
 ### 对于Serverless的意义 
 
@@ -278,9 +215,198 @@ Serverless函数运行的任务一般比较简单，大部分都能兼容OSv这�
 
 
 
-###### 项目中使用的测试机配置如下
+## 附录
+
+### 项目中使用的测试机配置
 
 - E3-1270v6
 - 32GB RAM
 - SSD
 - Ubuntu 20.04 x64
+
+
+
+### OSv 的安装使用（补充）
+
+#### 安装OSv
+
+在终端中输入命令
+
+```shell
+#下载仓库并安装需要的包
+git clone https://github.com/cloudius-systems/osv.git
+cd osv && git submodule update --init --recursive
+sudo ./scripts/setup.py
+
+#编译一个helloworld（每次编译生成的镜像都放在./build/release/usr.img）
+./scripts/build image=native-example
+```
+
+（下面的讨论都在osv目录下进行）
+
+这时打包好的镜像就被放在`./build/release/usr.img`目录下了，然后可以按如下方式运行：
+
+```shell
+#运行（使用qemu/kvm）
+./scripts/run.py
+#运行（使用firecracker/kvm，首次运行会自动下载firecracker）
+./scripts/firecracker.py
+```
+
+由 OSv 提供的 python 脚本会自动进行一定的配置并运行刚刚打包的镜像。
+
+以 qemu/kvm 为例，产生输出：
+
+```shell
+OSv v0.55.0-13-gcf78fa9e
+eth0: 192.168.122.15
+Booted up in 578.21 ms
+Cmdline: /hello
+Hello from C code
+```
+
+注：这一节实验的环境是 VMware Workstation 的虚拟机，启动时间和测试机有很大不同。
+
+#### OSv镜像的打包
+
+在前面的示例中，使用官方提供的`./scripts/build`脚本来打包镜像，使用`image=<app_name>`参数来指定要打包的应用项目，这一脚本将会从`./apps/<app_name>`的目录寻找打包镜像所需要的文件，以上面的 native-example 为例，这一目录下有以下文件：
+
+- hello.c ：源程序代码
+
+- Makefile ：打包时会进行 make ，可以把依赖项获取，源代码编译等等内容全都写在里面
+
+- module.py ：打包时指定镜像中运行的命令行等等，格式为：
+
+  ```python
+  from osv.modules import api
+  
+  default = api.run("/hello")	#具体使用时可以根据需要修改命令行，但是命令行也可以在运行时由参数指定，故这个地方不是必要的
+  ```
+
+- usr.manifest ：描述需要放到镜像内的文件在镜像中的位置，其中条目的格式为<镜像中位置>: <主机中位置>  这一文件通常也可以用 Makefile 来生成
+
+
+#### 使用firecracker启动 OSv unikernel
+
+由于 OSv 官方提供的用于运行镜像的脚本不能完全满足我们的要求，包括启动多个使用网络设备的VM等等。所以我们需要直接使用 firecracker ，并依据于此构建了uigniter。
+
+Firecracker启动OSv虚拟机至少需要以下资源：
+
+- disk image：我们编译的OSv应用的镜像，OSv仓库默认存在 `build/release/usr.raw`
+
+  注意：Firecracker仅支持RAW格式的镜像，这一般很大，实践中更常使用QCOW2格式 ，如`build/release/usr.img` ，不过通过下面的命令可以很快实现格式转换
+
+  ```
+  qemu-img convert -O raw <qcow_disk_path> <raw_disk_path>
+  ```
+
+- kernel loader：OSv仓库默认存在 `/build/release/kernel.elf` ，与我们的应用源码无关
+
+- 可能需要一些虚拟网络设备（事先配置好的tap或bridge）
+
+- 启动参数（包括要运行的命令）
+
+Firecracker提供两种配置VM的方法：
+
+- 使用 RESTful API
+- 使用配置文件（json格式）
+
+简单起见我们先使用后者：
+
+```
+firecracker --no-api --config-file <配置文件>
+```
+
+前面提到的所有信息都写在这个配置文件中
+
+另外我们需要让 Unikernel 间通信，所以要事先配置好网络。Firecracker至少支持两种网络配置——natted和bridge，Unikernel 较多时bridge更贴合我们的需求，以两个VM为例：
+
+```shell
+# 以下命令均需要sudo
+
+# 创建bridge并配置上IP
+brctl addbr fc_br0
+ip link set dev fc_br0 up
+ip addr add 172.16.0.1/24 dev fc_br0
+# 创建一个tap设备并和bridge相连
+ip tuntap add dev fc_tap0 mode tap
+ip link set dev fc_tap0 up
+brctl addif fc_br0 fc_tap0
+# 另一个tap设备同理
+ip tuntap add dev fc_tap1 mode tap
+ip link set dev fc_tap1 up
+brctl addif fc_br0 fc_tap1
+
+# 转到tests/network目录下
+# 把上面提到的kernel loader拷贝到kernel.elf
+# 把nginx镜像（raw格式）拷贝到nginx.raw，curl镜像（raw格式）拷贝到curl.raw
+firecracker --no-api --config-file config-nginx
+firecracker --no-api --config-file config-curl
+
+# 删除之前创建的网络设备（可选）
+ip tuntap del dev fc_tap0 mode tap
+ip tuntap del dev fc_tap1 mode tap
+```
+
+创建nginx，curl镜像的方法参考[OSv仓库](https://github.com/cloudius-systems/osv#building-osv-kernel-and-creating-images)
+
+#### 打包我们的模块
+
+OSv的优点之一就是提供了很高的兼容性支持，如C，C++，node.js，java，lua，python 等等语言全部都提供运行时支持（实际上是支持 Linux API）。并且在`osv/apps/`目录下有大量的实例应用以及运行时的打包模板（即之前叙述的打包所需的一些文件，除了应用源代码）等等
+
+我们的模块使用 JavaScript 编写，OSv 提供的打包既可以通过打包时自动下载 node ，也可以选择从主机复制node 相关文件，我们选择了自动下载，自动下载是在`./apps/node/Makefile`文件中进行设定配置以及版本选择的，首先可以使用（当前目录为OSv项目目录）
+
+```shell
+./scripts/build image=node
+```
+
+来下载，编译 node 以及生成 usr.manifest 等等，但是由于官方提供的文件似乎有些问题，直接使用脚本打包会报错，于是我们手动在自动下载的node目录中运行`make`，完成后将`./apps/node/node-8.11.2/out/Release/lib.target/libnode.so`复制到`./apps/node`目录下并改名为 `libnode-8.11.2.so`
+
+然后再按上述方法打包即可
+
+由于我们的模块使用了 express 框架，而 OSv 恰巧提供了`node-express-example`示例应用，所以我们将之稍加改动，用以打包我们的应用，通过之前的介绍，只需要将该示例中打包进镜像的 js 源代码改动一下，并且将我们的模块中`require`调用的路径参数修改一下即可。
+
+按照之前的描述，将 Firecracker 启动镜像所需的文件准备好，然后运行镜像如下（以keyvaluestore服务为例）：
+
+```shell
+$ ./firecracker.py --help
+usage: firecracker [-h] [-c VCPUS] [-m MEMSIZE] [-e CMD] [-k KERNEL]
+                   [-b BRIDGE] [-V] [-a]
+                   image id
+
+positional arguments:
+  image                 path to disk image file.
+  id                    unique id to set the vm's ip statically. range:
+                        [2:254]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -c VCPUS, --vcpus VCPUS
+                        specify number of vcpus
+  -m MEMSIZE, --memsize MEMSIZE
+                        specify memory size in MB
+  -e CMD, --execute CMD
+                        overwrite command line
+  -k KERNEL, --kernel KERNEL
+                        path to kernel loader file. defaults to kernel.elf
+  -b BRIDGE, --bridge BRIDGE
+                        bridge name for tap networking. defaults to fc_br0
+  -V, --verbose         pass --verbose to OSv, to display more debugging
+                        information on the console
+  -a, --api             use socket-based API to configure and start OSv on
+                        firecracker
+                        
+#下面是启动实例
+$ ./firecracker.py microservice.raw 2 -e "/libnode.so keyvaluestore.js"
+The bridge fc_br0 does not exist per brctl -> need to create one!
+[sudo] password for wangyuanlong: 
+OSv v0.55.0-13-gcf78fa9e
+eth0: 172.16.0.2
+Booted up in 907.72 ms
+Cmdline: /libnode.so keyvaluestore.js  
+Running keyvaluestore on port:  9000
+server is listening on 9000
+```
+
+这里的 firecracker.py 文件为根据我们需要修改的启动脚本，可以支持多个 unikernel 使用网络通信，其 ip 地址通过命令中的参数进行配置
+
