@@ -59,10 +59,32 @@ DEMO整体由以下几个部分组成：
 
 [这里放个图] //有要补充的模块请联系我或自行补充
 
-### uigniter 
+### Uigniter 
 
+用于管理Firecracker集群，大致分为以下几个部分
 
+- VM Pool
 
+  核心模块，维持着一个Firecracker VM的池子，其中的VM都已经分配了网络资源并进行了预配置，当新的OSv实例需求来临时，只需抽出一个可用的VM并配置剩余信息（镜像、启动参数），我们希望通过这种方式减少冷启动延迟。
+
+  使用两个go channel分别存储预配置和待销毁的Firecracker，并由一个go routine专门负责Firecracker创建（及资源分配）和销毁（及资源回收），从而对外（主要是API Server）提供一个线程安全的接口（用于启动和停止VM）。
+
+- Network
+
+  创建/管理网络资源（Tap设备、IP地址、MAC地址），并分配给VM Pool预配置的Firecracker。
+
+  使用桥接模式组织网络：Firecracker以Tap设备作为虚拟网卡，我们将所有的Tap同一个默认Bridge设备（uigniter0）连接起来，此时Bridge的功能类似真实交换机，且不同OSv实例间通信时数据包不需要经过Host机器的协议栈。
+
+- API Server
+
+  提供REST API的使用接口，目前实现了两种方法：
+
+  - 创建并启动OSv实例：POST http://localhost/vm/run
+  - 停止OSv实例：POST http://localhost/vm/{id}/stop
+
+![uigniter](files/uigniter.png)
+
+详细使用方法见[README](https://github.com/richardlee159/uigniter/blob/e1c063341d658ec897a029b30874bc01bb852a1a/README.md)
 
 
 
