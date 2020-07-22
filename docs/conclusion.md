@@ -356,7 +356,7 @@ server is listening on 9000
 
 下图展示了Firecracker的结构。一个Firecracker进程支持运行一个VM（对我们来说就是OSv实例），且提供一个基于UDS的API用于控制VM状态。在Uigniter中，我们利用了这个特性，先行创建一个Firecracker进程池，通过API配置好虚拟网卡、MAC地址等基础信息，当启动新VM的请求来临时配置镜像文件、启动参数等剩余信息并启动，希望通过这种方式减少操作的延迟。
 
-![img](https://github.com/OSH-2020/x-orz/blob/master/docs/files/2020072102.png)
+![img](files/2020072102.png)
 
 ### Uigniter的提出
 
@@ -443,9 +443,9 @@ END				#信息结束
 
 如果让所有模块全部在主机中运行，则它们之间的通信可以通过 localhost 进行：
 
-![img](https://github.com/OSH-2020/x-orz/blob/master/docs/files/2020072100.png)
+![img](files/2020072100.png)
 
-![img](https://github.com/OSH-2020/x-orz/blob/master/docs/files/QQ2020072101.png)
+![img](files/QQ2020072101.png)
 
 
 
