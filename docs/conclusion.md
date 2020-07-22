@@ -1,44 +1,29 @@
+[TOC]
+
 ## 项目介绍
 
 ​          随着云计算的兴起，越来越多的人们使用云平台来运行自己的服务与应用。为了提高资源的有效利用，云提供商常常会使用虚拟化技术将同一台物理机划分给不同的云租户。Unikernel是继Docker之后的又一种虚拟化技术，Unikernel 是将应用代码及其依赖与 libOS 一同打包的单一功能的单地址空间镜像，它具有轻量，快速，结构简单，安全，不可变基础设施等等特性，这些特性也使得 unikernel 非常适合于微服务（microservice）以及物联网（IoT）等等的架构。
 
-​          我们参考研究了工业控制系统的结构。其大体的工作流程是在interface部分利用传感器等采集信号，然后通过information Processing部分进行信息的处理，最后在intelligence部分对系统进行智能控制。我们的项目选取了其中的信息处理部分的一小部分，将应用进行解耦与模块化。将相对独立的功能封装进 unikernel 运行，来发挥 unikernel 快速，安全，轻量的优点，满足相应需求。 
+​          我们参考研究了工业控制系统的结构。其大体的工作流程是在interface部分利用传感器等采集信号，然后通过Information Processing部分进行信息的处理，最后在intelligence部分对系统进行智能控制。我们的项目选取了其中的信息处理部分的一小部分，将应用进行解耦与模块化。将相对独立的功能封装进 Unikernel 运行，来发挥 Unikernel 快速，安全，轻量的优点，满足相应需求。 
 
 
 
 ## 立项依据
 
-### 技术依据
+一些Unikernel的打包技术已经比较成熟，如IncludeOS，OSv 等。我们可以直接利用这些工具，具体打包方法会在下文详细介绍。有了Unikernel打包方法，只需要将应用解耦，分别打包到不同的Unikernel即可，Unikernel之间可采用网络通信。
 
-负载均衡技术
+#### 负载均衡
 
-负载均衡是一种计算机技术，用来在多个计算机（计算机集群）、网络连接、CPU、磁盘驱动器或其他资源中分配负载，让所有节点以最小的代价、最好的状态对外提供服务，快速获取重要数据，最大化降低了单个节点过载、甚至crash的概率，解决大量并发访问服务问题。
+如果我们有多个可以提供服务的资源时，这一资源有可能是一个CPU核，或是服务器集群中的一台服务器等等，负载均衡技术就可以帮助我们提高效率。考虑我们有多个CPU核与多个进程的情形，如果所有进程都在一个核上等待运行，那么会产生很多的等待时间，同时其它的核又处于空闲，既降低了服务效率，又造成资源浪费。这时完全可以将一些排队中的进程调度到其它空闲核上，从而利用起多核的资源。
 
- 如果我们有多个可以提供服务的资源时，这一资源有可能是一个CPU核，或是服务器集群中的一台服务器等等，负载均衡技术就可以帮助我们提高效率。考虑我们有多个CPU核与多个进程的情形，如果所有进程都在一个核上等待运行，那么会产生很多的等待时间，同时其它的核又处于空闲，既降低了服务效率，又造成资源浪费。这时完全可以将一些排队中的进程调度到其它空闲核上，从而利用起多核的资源。
-
- 常用的负载均衡策略包括：轮询，按比率分配，按优先级分配，按负担轻重分配，按响应速度分配，按最佳效率分配（相当于综合前面两项），随机分配，使用Hash方法分配等等。
-
-资源缓冲池技术
+#### 资源缓冲池
 
 资源池化是优化资源利用的常用策略，其本质是一种重新组织资源的方式。比如对于线程，其创建和销毁的过程是慢于其唤醒和挂起的过程的，但同时线程这一资源又要在系统中频繁的被使用和弃置，为了降低创建销毁开销，可以使用线程池方法，即预先启动一系列空闲线程，当需要创建线程时，从线程池中唤醒一个线程处理请求，当处理完成时将线程重新挂起，放回线程池中。
-
-这一策略中还有一些细节问题可根据实际需要选择，比如当所有资源被占用的时候面对新请求是额外创建资源对象还是搁置请求直到有资源空闲下来再分配。前者可以一定程度避免缓冲池的溢出，提高服务可用性；但后者避免实际资源被过度的分割（比如CPU时间被大量活跃线程分割得过小）。再比如当超出的资源（资源池空时被新建的实例）被释放的时候是将其销毁还是添加到资源池中，两种选择各有利弊。
-
-线程池模式一般分为两种：HS/HA半同步/半异步模式、L/F领导者与跟随者模式。
-
-- 半同步/半异步模式又称为生产者消费者模式，是比较常见的实现方式，比较简单。分为同步层、队列层、异步层三层。同步层的主线程处理工作任务并存入工作队列，工作线程从工作队列取出任务进行处理，如果工作队列为空，则取不到任务的工作线程进入挂起状态。由于线程间有数据通信，因此不适于大数据量交换的场合。
-
-- 领导者跟随者模式，在线程池中的线程可处在3种状态之一：领导者leader、追随者follower或工作者processor。任何时刻线程池只有一个领导者线程。事件到达时，领导者线程负责消息分离，并从处于追随者线程中选出一个来当继任领导者，然后将自身设置为工作者状态去处置该事件。处理完毕后工作者线程将自身的状态置为追随者。这一模式实现复杂，但避免了线程间交换任务数据，提高了CPU cache相似性。在ACE(Adaptive Communication Environment)中，提供了领导者跟随者模式实现。、
-
-
-### 理论依据
-
-​       一些unikernel的打包技术已经比较成熟，如includeOS，OSv 等。我们可以直接利用这些轮子，具体打包方法会在下文详细介绍。有了unikernel打包方法，只需要将应用解耦，分别打包到不同的unikernel即可，unikernel之间可采用网络通信。
 
 ### 重要性与前瞻性
 
 
-随着对云端访问的需求量的增大，如何进一步提高服务性能成了重要的课题。我们的项目便是利用unikernel的特性， 在Unikernel的基础上，我们针对实际应用中出现的情景，运用模块化的思想，在更高的层次上对实际的需求进行抽象，将其切分为更小的基本组件，将原有的应用解耦后打包进unikernel,  以实现对计算资源更充分的利用，提高服务集群的性能，主要优势在：
+随着对云端访问的需求量的增大，如何进一步提高服务性能成了重要的课题。我们的项目便是利用Unikernel的特性， 在Unikernel的基础上，我们针对实际应用中出现的情景，运用模块化的思想，在更高的层次上对实际的需求进行抽象，将其切分为更小的基本组件，将原有的应用解耦后打包进Unikernel,  以实现对计算资源更充分的利用，提高服务集群的性能，主要优势在：
 
 - 与容器方案相比：更好的安全性和隔离性。
 - 与传统VM的方案相比：更好的容错性。这是因为一个Unikernel实例相当于一个虚拟服务器，它的崩溃不会影响整个任务的执行，调度系统只需要再创建/调度另一个提供同样服务的Unikernel即可。
@@ -91,123 +76,22 @@ DEMO整体由以下几个部分组成：
 
 ## 过程回顾
 
-### unikernel的选择
+### Unikernel的选择
 
-在前期调研中，我们先整体上了解了一下各种unikernel的基本信息。不同的Unikernel实现各有其支持的应用层语言，下层平台以及擅长领域，简单总结如下表所示：
+在前期调研中，我们先整体上了解了各种Unikernel的基本信息。不同的Unikernel实现各有其支持的应用层语言，运行平台以及擅长领域。
 
-| Unikernel       | 支持语言                                                     | 支持平台                                            | 功能特点，使用场景                                           |
-| --------------- | ------------------------------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------ |
-| ClickOS         | C++                                                          | Xen                                                 | NFV(网络功能虚拟化)                                          |
-| HalVM           | Haskell                                                      | Xen                                                 | 主要用于在 Xen上运行单用途、轻量级虚拟机                     |
-| IncludeOS       | C++                                                          | KVM,QEMU, VirtualBox, ESXi, Google Cloud, OpenStack | 针对弹性、可扩展、提供大量分布式微服务的云计算平台           |
-| MirageOS        | OCaml                                                        | KVM, Xen, RTOS/MCU                                  | 用于各种云计算和移动平台，例如 Xen、 KVM 和嵌入式设备        |
-| Nanos Unikernel | C, C++, Go, Java, Node.js, Python, Rust, Ruby, PHP, etc      | QEMU/KVM                                            | 使用工具OPS将各种语言的程序组织成Unikernel                   |
-| OSv             | Java, C, C++, Node, Ruby                                     | VirtualBox, ESXi, KVM, Amazon EC2, Google Cloud     | 在云平台中快速构建优化的单应用程序，或不需修改就可运行的现有应用程序 |
-| Rumprun         | C, C++, Erlan, Go, Java, JavaScript, Node.js, Python, Ruby, Rust | Xen, KVM                                            | 嵌入式系统，云环境                                           |
-| ToroKernel      | FreePascal                                                   | VirtualBox, KVM, XEN, HyperV, Bare Metal            | 用于运行微服务                                               |
-| Clive           | Go                                                           | Xen，KVM                                            | 分布式与云计算环境，用以实现高效云服务                       |
-| Drawbridge      | C                                                            | Windows picoprocess                                 | 支持 Windows 上的桌面应用程序，以及其他可能的 libOS（比如 Linux， Unix， FreeBSD） |
-| Graphene        | C                                                            | Linux picoprocess                                   | 在跨平台的主机上运行兼容 Linux 的多进程应用程序；对 Linux 应用程序有较高安全性需求的场景 |
-| HermitCore      | C， C ++， Fortran， Go 等                                   | Xen， KVM， x86_64 架构                             | 适用于高性能计算（HPC）的应用服务，比如科学计算，实验研究，气象预报等应用场景 |
-| LING            | Erlang                                                       | Xen                                                 | 用于构建具有高可用性要求的大规模可扩展的软实时系统           |
-| Runtime.js      | Javascript                                                   | Xen,KVM                                             | 需要运行 JavaScript 的轻量级虚拟机云服务                     |
+为了降低学习的任务量，我们倾向于选择支持C，C++的Unikernel，在调研了几种Unikernel的成熟度之后，我们最初选择了IncludeOS。但是随着对includeOS的深度学习，我们发现了includeOS应用在我们项目的几个弊端：
 
-首先为了降低学习的任务量，我们会倾向于选择支持C，C++的unikernel，在调研了几种unikernel的成熟度之后，我们刚开始是选择了使用includeOS。但是随着对includeOS的深度学习，我们随即发现了includeOS应用在我们项目的几个弊端：
+- 官方文档比较旧，里面有很多问题需要更新，这不利于我们的部署
+- 开发上有很多限制（不能随心所欲地调用标准库）
 
-- incudeOS 的官方文档比较旧，里面有很多问题需要更新，这不利于我们的部署。
+因此我们又把目光转向了OSv，它主要有如下特点：
 
-- 如果用includeOS打包一个unikernel实例 ，我们需要从头开始配置所有的文件，这个工作量是比较大的
+- 多种运行环境支持：可不加修改运行大部分单进程的POSIX程序
 
-  基于此我们最终选择的OSv 
+- 专为虚拟化环境设计：比如去除了自旋锁（spinlock）从而减少虚拟机的CPU开销；且只实现了简单的I/O驱动（VirtIO）
 
-OSv相比于includeOS可以和轻量的firecracker结合使用，另外OSv可以不加修改运行大部分单进程POSIX程序。这就在一定程度上简化了我们的工作。
-
-### OSv 的安装使用
-
-环境：
-
-- Ubuntu 20.04 (有虚拟化支持，具备 /dev/kvm 设备)
-- 个人PC
-
-#### 安装OSv
-
-在终端中输入命令
-
-```shell
-#下载仓库并安装需要的包
-git clone https://github.com/cloudius-systems/osv.git
-cd osv && git submodule update --init --recursive
-sudo ./scripts/setup.py
-
-#编译一个helloworld（每次编译生成的镜像都放在./build/release/usr.img）
-./scripts/build image=native-example
-```
-
-产生如下输出（下面的讨论都在osv目录下进行）：
-
-```shell
-Building into build/release.x64
-  GEN gen/include/osv/version.h
-No such image configuration: native-example. Assuming list of modules.
-Importing /home/wangyuanlong/osv/apps/native-example/module.py
-Modules:
-  native-example.*
-make: Nothing to be done for 'module'.
-Preparing usr.manifest
-Appending /home/wangyuanlong/osv/apps/native-example/usr.manifest to usr.manifest
-Preparing bootfs.manifest
-Saving command line to /home/wangyuanlong/osv/build/release.x64/cmdline
-Building into build/release.x64
-  GEN gen/include/osv/version.h
-OSv v0.55.0-13-gcf78fa9e
-eth0: 192.168.122.15
-Booted up in 480.41 ms
-Cmdline: /tools/mkfs.so; /tools/cpiod.so --prefix /zfs/zfs/; /zfs.so set compression=off osv
-Running mkfs...
-Adding /libenviron.so...
-Adding /libvdso.so...
-Adding /zpool.so...
-Adding /libzfs.so...
-Adding /libuutil.so...
-Adding /zfs.so...
-Adding /tools/mkfs.so...
-Adding /tools/cpiod.so...
-Adding /tools/mount-fs.so...
-Adding /tools/umount.so...
-Adding /usr/lib/libgcc_s.so.1...
-Adding /etc/hosts...
-Link /etc/mnttab to /proc/mounts ...
-Adding /etc/fstab...
-Adding /dev...
-Adding /proc...
-Adding /sys...
-Adding /tmp...
-Adding /hello...
-cpiod finished
-```
-
-这时打包好的镜像就被放在`./build/release/usr.img`目录下了，然后可以按如下方式运行：
-
-```shell
-#运行（使用qemu/kvm）
-./scripts/run.py
-#运行（使用firecracker/kvm，首次运行会自动下载firecracker）
-./scripts/firecracker.py
-```
-
-由 OSv 提供的 python 脚本会自动进行一定的配置并运行刚刚打包的镜像。
-
-以 qemu/kvm 为例，产生输出：
-
-```shell
-OSv v0.55.0-13-gcf78fa9e
-eth0: 192.168.122.15
-Booted up in 578.21 ms
-Cmdline: /hello
-Hello from C code
-```
-
-由于实验的环境是在 VMware Workstation 的虚拟机环境，在嵌套虚拟化下启动时间受到了一定的影响。
+由于OSv移植方便，且支持多种编程语言，我们觉得它更可能促进Web应用部署由Container转向Unikernel（而不是IncludeOS、mirageOS这类移植很不方便的工具），毕竟计算机历史上很多变革靠的都不是表现“最优”的新技术，而是那些与旧技术兼容性更好、迁移更容易而表现不差的新技术。
 
 #### OSv镜像的打包
 
@@ -229,70 +113,6 @@ Hello from C code
 
 - README.md ：不言自明，是简单的项目描述
 
-#### 使用firecracker启动 OSv unikernel
-
-由于 OSv 官方提供的用于运行镜像的脚本不能完全满足我们的要求，包括启动多个使用网络设备的VM等等。所以我们需要直接使用 firecracker ，并依据于此构建了uigniter。
-
-Firecracker启动OSv虚拟机至少需要以下资源：
-
-- disk image：我们编译的OSv应用的镜像，OSv仓库默认存在 `build/release/usr.raw`
-
-  注意：Firecracker仅支持RAW格式的镜像，这一般很大，实践中更常使用QCOW2格式 ，如`build/release/usr.img` ，不过通过下面的命令可以很快实现格式转换
-
-  ```
-  qemu-img convert -O raw <qcow_disk_path> <raw_disk_path>
-  ```
-
-- kernel loader：OSv仓库默认存在 `/build/release/kernel.elf` ，与我们的应用源码无关
-
-- 可能需要一些虚拟网络设备（事先配置好的tap或bridge）
-
-- 启动参数（包括要运行的命令）
-
-Firecracker提供两种配置VM的方法：
-
-- 使用 RESTful API
-- 使用配置文件（json格式）
-
-简单起见我们先使用后者：
-
-```
-firecracker --no-api --config-file <配置文件>
-```
-
-前面提到的所有信息都写在这个配置文件中
-
-另外我们需要让 Unikernel 间通信，所以要事先配置好网络。Firecracker至少支持两种网络配置——natted和bridge，Unikernel 较多时bridge更贴合我们的需求，以两个VM为例：
-
-```shell
-# 以下命令均需要sudo
-
-# 创建bridge并配置上IP
-brctl addbr fc_br0
-ip link set dev fc_br0 up
-ip addr add 172.16.0.1/24 dev fc_br0
-# 创建一个tap设备并和bridge相连
-ip tuntap add dev fc_tap0 mode tap
-ip link set dev fc_tap0 up
-brctl addif fc_br0 fc_tap0
-# 另一个tap设备同理
-ip tuntap add dev fc_tap1 mode tap
-ip link set dev fc_tap1 up
-brctl addif fc_br0 fc_tap1
-
-# 转到tests/network目录下
-# 把上面提到的kernel loader拷贝到kernel.elf
-# 把nginx镜像（raw格式）拷贝到nginx.raw，curl镜像（raw格式）拷贝到curl.raw
-firecracker --no-api --config-file config-nginx
-firecracker --no-api --config-file config-curl
-
-# 删除之前创建的网络设备（可选）
-ip tuntap del dev fc_tap0 mode tap
-ip tuntap del dev fc_tap1 mode tap
-```
-
-创建nginx，curl镜像的方法参考[OSv仓库](https://github.com/cloudius-systems/osv#building-osv-kernel-and-creating-images)
-
 #### 打包我们的模块
 
 OSv的优点之一就是提供了很高的兼容性支持，如C，C++，node.js，java，lua，python 等等语言全部都提供运行时支持（实际上是支持 Linux API）。并且在`osv/apps/`目录下有大量的实例应用以及运行时的打包模板（即之前叙述的打包所需的一些文件，除了应用源代码）等等
@@ -312,33 +132,6 @@ OSv的优点之一就是提供了很高的兼容性支持，如C，C++，node.js
 按照之前的描述，将 Firecracker 启动镜像所需的文件准备好，然后运行镜像如下（以keyvaluestore服务为例）：
 
 ```shell
-$ ./firecracker.py --help
-usage: firecracker [-h] [-c VCPUS] [-m MEMSIZE] [-e CMD] [-k KERNEL]
-                   [-b BRIDGE] [-V] [-a]
-                   image id
-
-positional arguments:
-  image                 path to disk image file.
-  id                    unique id to set the vm's ip statically. range:
-                        [2:254]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -c VCPUS, --vcpus VCPUS
-                        specify number of vcpus
-  -m MEMSIZE, --memsize MEMSIZE
-                        specify memory size in MB
-  -e CMD, --execute CMD
-                        overwrite command line
-  -k KERNEL, --kernel KERNEL
-                        path to kernel loader file. defaults to kernel.elf
-  -b BRIDGE, --bridge BRIDGE
-                        bridge name for tap networking. defaults to fc_br0
-  -V, --verbose         pass --verbose to OSv, to display more debugging
-                        information on the console
-  -a, --api             use socket-based API to configure and start OSv on
-                        firecracker
-                        
 #下面是启动实例
 $ ./firecracker.py microservice.raw 2 -e "/libnode.so keyvaluestore.js"
 The bridge fc_br0 does not exist per brctl -> need to create one!
@@ -353,9 +146,7 @@ server is listening on 9000
 
 这里的 firecracker.py 文件为根据我们需要修改的启动脚本，可以支持多个 unikernel 使用网络通信，其 ip 地址通过命令中的参数进行配置
 
-
-
-### osv的修改 
+### OSv的修改 
 
 我们发现，当OSv中的应用空闲/阻塞时（比如Nginx等待请求），整个OSv实例仍会占用宿主机超过10%的CPU资源，这是不合理的。而且考虑到这意味这我们的测试机只能同时运行不到100个Unikernel，这是完全无法接受的。
 
@@ -384,9 +175,7 @@ server is listening on 9000
 
 理想情况下，我们希望有类似Kubernetes这样的工具来编排OSv实例。现有条件下,我们可以使用K8s+Virtlet插件或者OpenStack，通过移植Firecracker替代原本的Libvirt/QEMU后端，达到运行OSv的目的；又或者通过专为Firecracker开发的管理工具[Weave Ignite](https://github.com/weaveworks/ignite/)（类似容器中的Docker，运行OCI标准的镜像），修改使其兼容OSv镜像。不过，上述工具都是原本为虚拟机/容器开发的，不容易保留原本OSv+Firecracker方案的优势（如冷启动时间），对原本就比较复杂的项目加以修改对我们也是个挑战。考虑到我们的功能需求比较简单（创建、启动、停止OSv实例），我们决定使用Go语言自己实现一个轻量的OSv管理工具，这就是Uigniter。
 
-
-
-### express框架
+### Express框架
 
 我们选用的是后端最常用的服务框架之一：express框架。
 
@@ -396,8 +185,6 @@ server is listening on 9000
 - 使用post方法为其定义响应post请求的行为。
 - 使用get方法为其定义响应get请求的行为。
 - 使用listen方法令其监听某个端口。
-
-
 
 ### 将 keyvaluestore.js 替换为 memcached
 
@@ -477,12 +264,6 @@ END				#信息结束
 
 
 
-### 性能测试
-
-
-
-
-
 ## 未来展望
 
 我们项目理想的架构（可以把微服务的标准模型搬过来？）
@@ -491,7 +272,7 @@ END				#信息结束
 
 
 
-### 对于serverless的意义 
+### 对于Serverless的意义 
 
 Serverless现在主要有三种实现方式：一种通过容器实现，这是目前大多数云服务提供商的选择，不过多租户下的容器安全是个需要小心处理的地方，尝试解决的方案也有许多；一种是通过虚拟机实现，以AWS Lambda为代表，其安全性不言而喻，性能问题正在尝试通过更轻量的VMM来缓解；还有一种以Cloudflare Workers为代表，通过语言运行时（V8引擎）进行不同任务的隔离与调度，宣称拥有很好的性能与安全性，不过这种方案会限制编程语言的选择。
 
@@ -499,4 +280,9 @@ Serverless函数运行的任务一般比较简单，大部分都能兼容OSv这�
 
 
 
-*测试机：E3-1270v6, 32GB RAM, SSD, Ubuntu 20.04 x64
+###### 项目中使用的测试机配置如下
+
+- E3-1270v6
+- 32GB RAM
+- SSD
+- Ubuntu 20.04 x64
