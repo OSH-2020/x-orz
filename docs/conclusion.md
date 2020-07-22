@@ -229,13 +229,7 @@ END				#信息结束
 
 ### 运行结果
 
-#### 直接在 node 中运行
-
-环境：
-
-- Ubuntu 20.04 (有虚拟化支持，具备 /dev/kvm 设备)
-- node v10.19.0
-- 个人PC
+#### 直接在Host机器运行
 
 如果让所有模块全部在主机中运行，则它们之间的通信可以通过 localhost 进行：
 
@@ -243,11 +237,15 @@ END				#信息结束
 
 ![img](files/QQ2020072101.png)
 
+#### 使用Unikernel运行
 
+也就是Uigniter+Firecracker+OSv的方式
 
-#### 使用unikernel运行
+视频链接：https://rec.ustc.edu.cn/share/94693a20-cc17-11ea-a95e-cf8b29b975c1
 
+### 性能测试
 
+在实际使用中，用户感知到的（冷启动）响应时间，应该是自用户请求微服务，至得到微服务的响应的这段时间，中间经历了创建OSv实例、启动OSv、加载应用等阶段。我们在测试机上启动了100个OSv实例，应用为cURL，测得平均相应时间为163ms。如果将Uigniter的API调用途径由localhost改为Unix domain socket，应该可以进一步提升性能。
 
 
 
@@ -267,7 +265,9 @@ Serverless函数运行的任务一般比较简单，大部分都能兼容OSv这�
 
 
 
-###### 项目中使用的测试机配置如下
+## 附录
+
+### 项目中使用的测试机配置
 
 - E3-1270v6
 - 32GB RAM
